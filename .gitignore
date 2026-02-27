@@ -1,0 +1,20 @@
+# Binaries
+ccc
+*.exe
+
+# Test coverage
+coverage.out
+
+# IDE
+.idea/
+.vscode/
+*.swp
+
+# Build artifacts
+build/
+
+# OS files
+.DS_Store
+ping-telegram
+telegram_*.jpg
+ccc-linux

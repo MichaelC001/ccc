@@ -1,0 +1,108 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - 'v*'
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    strategy:
+      matrix:
+        include:
+          - os: macos-latest
+            goos: darwin
+            goarch: arm64
+            name: ccc-darwin-arm64
+          - os: ubuntu-latest
+            goos: linux
+            goarch: amd64
+            name: ccc-linux-amd64
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: recursive
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version: '1.24'
+
+      - name: Install dependencies (Linux)
+        if: matrix.goos == 'linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y cmake pkg-config nasm
+
+      - name: Build ffmpeg static (Linux)
+        if: matrix.goos == 'linux'
+        run: |
+          curl -sL https://ffmpeg.org/releases/ffmpeg-8.0.1.tar.xz | tar xJ
+          cd ffmpeg-8.0.1
+          ./configure \
+            --prefix=${{ github.workspace }}/build/ffmpeg \
+            --enable-static \
+            --disable-shared \
+            --disable-programs \
+            --disable-doc \
+            --disable-network \
+            --disable-everything \
+            --enable-demuxer=ogg,matroska,wav,mp3,flac,aac,mov \
+            --enable-decoder=opus,vorbis,flac,mp3,aac,pcm_s16le,pcm_f32le \
+            --enable-parser=opus,vorbis,flac,mpegaudio,aac \
+            --enable-protocol=file \
+            --enable-filter=aresample \
+            --enable-swresample \
+            --extra-cflags="-fPIC"
+          make -j$(nproc)
+          make install
+
+      - name: Install dependencies (macOS)
+        if: matrix.goos == 'darwin'
+        run: brew install ffmpeg pkg-config
+
+      - name: Build whisper.cpp
+        run: make deps
+
+      - name: Build binary
+        run: |
+          FFMPEG_LDFLAGS=""
+          if [ -d "$(pwd)/build/ffmpeg/lib" ]; then
+            FFMPEG_LDFLAGS="-L$(pwd)/build/ffmpeg/lib"
+          fi
+          PKG_CONFIG_PATH="$(pwd)/build/whisper/lib/pkgconfig:$(pwd)/build/ffmpeg/lib/pkgconfig" \
+          CGO_LDFLAGS_ALLOW="-(W|D|L).*" \
+          CGO_LDFLAGS="$FFMPEG_LDFLAGS" \
+          CGO_ENABLED=1 \
+            go build -tags voice -o ${{ matrix.name }}
+
+      - name: Verify static linking (Linux)
+        if: matrix.goos == 'linux'
+        run: |
+          ldd ${{ matrix.name }} | grep -v "libav\|libsw" || echo "No ffmpeg dynamic deps - good!"
+          ldd ${{ matrix.name }}
+
+      - name: Codesign (macOS)
+        if: matrix.goos == 'darwin'
+        run: codesign -f -s - ${{ matrix.name }} 2>/dev/null || true
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: ${{ matrix.name }}
+          path: ${{ matrix.name }}
+
+  release:
+    needs: build
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/download-artifact@v4
+
+      - name: Create release
+        uses: softprops/action-gh-release@v2
+        with:
+          files: |
+            ccc-darwin-arm64/ccc-darwin-arm64
+            ccc-linux-amd64/ccc-linux-amd64

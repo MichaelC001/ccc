@@ -1,0 +1,25 @@
+# Fly.io config for ccc relay server
+# Deploy with: fly launch --config fly.relay.toml --dockerfile Dockerfile.relay
+
+app = "ccc-relay"
+primary_region = "cdg"
+
+[build]
+  dockerfile = "Dockerfile.relay"
+
+[http_service]
+  internal_port = 8080
+  force_https = true
+  auto_stop_machines = false
+  auto_start_machines = true
+  min_machines_running = 1
+
+[vm]
+  memory = "256mb"
+  cpu_kind = "shared"
+  cpus = 1
+
+# Ephemeral storage for temp files (cleared on restart)
+[mounts]
+  source = "relay_data"
+  destination = "/tmp"
