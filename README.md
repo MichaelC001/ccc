@@ -1,6 +1,6 @@
 # FuseCapy
 
-A personal AI assistant that connects your LLM to chat platforms, manages conversations, and runs on your own hardware.
+Fuse everything into one hub — coding agents, chat, notes, todos. Self-hosted, AI-powered. iOS app + Telegram + CLI.
 
 ## What it does
 
